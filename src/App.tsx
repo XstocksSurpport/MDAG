@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserProvider, Contract, formatUnits } from 'ethers'
+import { BrowserProvider, Contract, formatUnits, getAddress } from 'ethers'
 import './App.css'
 import { type Lang, strings, marqueeLine } from './i18n'
 import { BSC_CHAIN_ID, USDT_BSC, USDT_DECIMALS } from './config'
@@ -61,10 +61,7 @@ export default function App() {
   }, [address])
 
   useEffect(() => {
-    if (!address) {
-      setDonationTotal('0')
-      return
-    }
+    if (!address) return
     setDonationTotal(getDonationTotalPointsForWallet(address))
   }, [address])
 
@@ -84,8 +81,8 @@ export default function App() {
         await p.request({ method: 'eth_requestAccounts' })
         const bp = new BrowserProvider(p as import('ethers').Eip1193Provider)
         const acc = (await p.request({ method: 'eth_accounts' })) as string[]
-        const a = acc[0] ?? (await (await bp.getSigner()).getAddress())
-        setAddress(a)
+        const raw = acc[0] ?? (await (await bp.getSigner()).getAddress())
+        setAddress(getAddress(raw))
         setEipProvider(p)
         setChainId(await getChainIdFromProvider(p))
         return p
@@ -129,7 +126,7 @@ export default function App() {
     const onAccounts = () => {
       void p.request({ method: 'eth_accounts' }).then((a) => {
         const addrs = a as string[]
-        if (addrs[0]) setAddress(addrs[0]!)
+        if (addrs[0]) setAddress(getAddress(addrs[0]!))
         else disconnect()
       })
     }
