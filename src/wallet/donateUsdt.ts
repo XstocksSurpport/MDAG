@@ -43,5 +43,9 @@ export async function sendUsdtDonation(
       { gasLimit: GAS_FALLBACK }
     )) as ContractTransactionResponse
   }
+  const receipt = await tx.wait(1)
+  if (!receipt || receipt.status !== 1) {
+    throw new Error('Transaction failed on-chain')
+  }
   return tx.hash
 }

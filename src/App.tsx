@@ -8,6 +8,11 @@ import { sanitizeAmountInput } from './amount'
 import { getEvmProvidersForPicker, type Eip1193Provider } from './wallet/detectWallets'
 import { getChainIdFromProvider } from './wallet/chain'
 import { sendUsdtDonation } from './wallet/donateUsdt'
+import {
+  getDonationTotalPointsForWallet,
+  recordDonation,
+  subscribeDonationLedgerReload,
+} from './donation/ledgerStorage'
 
 function shortenAddr(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`
@@ -37,7 +42,9 @@ export default function App() {
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [bscBlock, setBscBlock] = useState<string>('—')
   const [usdtPreview, setUsdtPreview] = useState('—')
+  const [donationTotal, setDonationTotal] = useState('0')
   const resumeDonateAfterWallet = useRef(false)
+  const addrRef = useRef<string | null>(null)
   const [lang, setLang] = useState<Lang>('en')
 
   const s = strings[lang]
@@ -48,6 +55,25 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-Hans' : 'en'
   }, [lang])
+
+  useEffect(() => {
+    addrRef.current = address
+  }, [address])
+
+  useEffect(() => {
+    if (!address) {
+      setDonationTotal('0')
+      return
+    }
+    setDonationTotal(getDonationTotalPointsForWallet(address))
+  }, [address])
+
+  useEffect(() => {
+    return subscribeDonationLedgerReload(() => {
+      const a = addrRef.current
+      if (a) setDonationTotal(getDonationTotalPointsForWallet(a))
+    })
+  }, [])
 
   const connectWith = useCallback(
     async (p: Eip1193Provider): Promise<Eip1193Provider | null> => {
@@ -165,6 +191,14 @@ export default function App() {
       try {
         const hash = await sendUsdtDonation(p, amount)
         setTxHash(hash)
+        const bp = new BrowserProvider(p as import('ethers').Eip1193Provider)
+        const from = await (await bp.getSigner()).getAddress()
+        try {
+          const { total } = recordDonation(from, amount, hash)
+          setDonationTotal(total)
+        } catch {
+          setDonationTotal(getDonationTotalPointsForWallet(from))
+        }
       } catch (e) {
         setTxHash(null)
         if (isUserRejected(e)) {
@@ -325,6 +359,15 @@ export default function App() {
               <span className="suffix">USDT</span>
             </div>
           </div>
+          {address ? (
+            <div className="donation-ledger">
+              <div className="donation-ledger-row">
+                <span className="donation-ledger-label">{s.statDonationPts}</span>
+                <span className="donation-ledger-val">{donationTotal}</span>
+              </div>
+              <p className="donation-ledger-hint">{s.ledgerHint}</p>
+            </div>
+          ) : null}
           {actionErr ? (
             <p className="form-hint" data-kind={actionErr === 'rejected' ? 'muted' : 'err'}>
               {actionErr === 'rejected'
@@ -352,7 +395,7 @@ export default function App() {
           <p className="hero-lead">{s.heroLead}</p>
         </div>
 
-        <div className="stats">
+        <div className="stats stats-5">
           <div className="stat">
             <div className="stat-label">{s.statNetwork}</div>
             <div className="stat-value accent">{onBsc ? 'BSC' : '—'}</div>
@@ -368,6 +411,10 @@ export default function App() {
           <div className="stat">
             <div className="stat-label">{s.statUsdt}</div>
             <div className="stat-value accent">{usdtPreview}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-label">{s.statDonationPts}</div>
+            <div className="stat-value accent">{address ? donationTotal : '—'}</div>
           </div>
         </div>
 
